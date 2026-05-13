@@ -172,7 +172,6 @@ function PersonaEditor() {
 
 const GROUP_LABELS: Record<string, string> = {
   thinking: 'Thinking Kit',
-  brain: 'Brain',
   browser: 'Browser',
   cron: 'Cron Scheduler',
   equity: 'Equity Data',

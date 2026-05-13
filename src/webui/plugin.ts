@@ -15,7 +15,6 @@ import { createEventsRoutes } from './routes/events.js'
 import { createTopologyRoutes } from './routes/topology.js'
 import { createCronRoutes } from './routes/cron.js'
 import { createHeartbeatRoutes } from './routes/heartbeat.js'
-import { createBrainRoutes } from './routes/brain.js'
 import { createTradingRoutes } from './routes/trading.js'
 import { createTradingConfigRoutes } from './routes/trading-config.js'
 import { createDevRoutes } from './routes/dev.js'
@@ -110,7 +109,6 @@ export class WebPlugin implements Plugin {
     app.route('/api/topology', createTopologyRoutes(ctx))
     app.route('/api/cron', createCronRoutes(ctx))
     app.route('/api/heartbeat', createHeartbeatRoutes(ctx))
-    app.route('/api/brain', createBrainRoutes())
     app.route('/api/trading/config', createTradingConfigRoutes(ctx))
     app.route('/api/trading', createTradingRoutes(ctx))
     app.route('/api/dev', createDevRoutes(ctx.connectorCenter))
