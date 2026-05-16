@@ -13,6 +13,7 @@ import {
   getAgentConfig,
   listAgentProfiles,
   saveAgentConfig,
+  testAgentConfig,
   type AgentConfig,
   type AgentConfigBundle,
   type AgentId,
@@ -36,10 +37,12 @@ interface FormState {
   wireApi: 'chat' | 'responses'
 }
 
-// codex-cli ≥ 0.130 dropped the legacy `wire_api = "chat"` shape; "responses"
-// is now the only supported value (see github.com/openai/codex/discussions/7782).
-// We still surface "chat" as a labelled-deprecated option so users on older
-// codex builds aren't surprised, but the default is "responses".
+// codex-cli ≥ 0.130 hard-rejects `wire_api = "chat"`. The AgentConfig schema
+// still carries `wireApi` (the backend writer / file IO is shared with other
+// codex-shaped configs), but this modal locks it to "responses" for every
+// codex provider — a stale 'chat' loaded from disk is normalized on display,
+// so the next Save silently corrects it.
+// Ref: github.com/openai/codex/discussions/7782
 const EMPTY_FORM: FormState = { baseUrl: '', apiKey: '', model: '', wireApi: 'responses' }
 
 function configToForm(cfg: AgentConfig | null): FormState {
@@ -48,7 +51,7 @@ function configToForm(cfg: AgentConfig | null): FormState {
     baseUrl: cfg.baseUrl ?? '',
     apiKey: cfg.apiKey ?? '',
     model: cfg.model ?? '',
-    wireApi: (cfg.wireApi as 'chat' | 'responses') ?? 'responses',
+    wireApi: 'responses',
   }
 }
 
@@ -64,6 +67,26 @@ function formToConfig(form: FormState, agent: AgentId): AgentConfig {
   return cfg
 }
 
+// Test result is per-tab so switching tabs doesn't lose the other agent's
+// verdict, AND each result is bound to the exact form snapshot it was tested
+// against — editing any field invalidates it (Save re-locks). This is the
+// "test-before-save" linkage: Save only enables when the *current* form has a
+// matching successful test.
+interface TestResult {
+  kind: 'pass' | 'fail'
+  snapshot: FormState
+  message: string  // model reply on pass, error on fail
+}
+
+function formsMatch(a: FormState, b: FormState, agent: AgentId): boolean {
+  return (
+    a.baseUrl === b.baseUrl &&
+    a.apiKey === b.apiKey &&
+    a.model === b.model &&
+    (agent !== 'codex' || a.wireApi === b.wireApi)
+  )
+}
+
 export function WorkspaceAIConfigModal({ wsId, onClose }: Props) {
   const [tab, setTab] = useState<Tab>('claude')
   const [profiles, setProfiles] = useState<AgentProfile[]>([])
@@ -75,6 +98,9 @@ export function WorkspaceAIConfigModal({ wsId, onClose }: Props) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savedFlash, setSavedFlash] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [claudeResult, setClaudeResult] = useState<TestResult | null>(null)
+  const [codexResult, setCodexResult] = useState<TestResult | null>(null)
 
   useEffect(() => {
     void Promise.all([listAgentProfiles(), getAgentConfig(wsId)])
@@ -89,6 +115,10 @@ export function WorkspaceAIConfigModal({ wsId, onClose }: Props) {
 
   const form = tab === 'claude' ? claudeForm : codexForm
   const setForm = tab === 'claude' ? setClaudeForm : setCodexForm
+  const result = tab === 'claude' ? claudeResult : codexResult
+  const setResult = tab === 'claude' ? setClaudeResult : setCodexResult
+  const resultMatchesCurrent = !!result && formsMatch(result.snapshot, form, tab)
+  const testPassedForCurrent = result?.kind === 'pass' && resultMatchesCurrent
   const dirty = useMemo(() => {
     if (!bundle) return false
     const saved = tab === 'claude' ? bundle.claude : bundle.codex
@@ -146,14 +176,56 @@ export function WorkspaceAIConfigModal({ wsId, onClose }: Props) {
     }
   }
 
+  const canTest =
+    !!form.baseUrl.trim() && !!form.apiKey.trim() && !!form.model.trim()
+
+  const handleTest = async () => {
+    if (!canTest) return
+    // Freeze the form snapshot at click time — async race protection: if the
+    // user starts editing while the request is in flight, the result we get
+    // back is still bound to *what was tested*, not what's currently typed.
+    const snapshot: FormState = {
+      baseUrl: form.baseUrl.trim(),
+      apiKey: form.apiKey.trim(),
+      model: form.model.trim(),
+      wireApi: form.wireApi,
+    }
+    setTesting(true)
+    try {
+      const r = await testAgentConfig(wsId, tab, {
+        baseUrl: snapshot.baseUrl,
+        apiKey: snapshot.apiKey,
+        model: snapshot.model,
+        ...(tab === 'codex' ? { wireApi: snapshot.wireApi } : {}),
+      })
+      setResult(
+        r.ok
+          ? { kind: 'pass', snapshot, message: r.response ?? '' }
+          : { kind: 'fail', snapshot, message: r.error ?? 'unknown error' },
+      )
+    } catch (err) {
+      setResult({ kind: 'fail', snapshot, message: (err as Error).message })
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  // Backdrop close uses onMouseDown (not onClick) so that text-selection
+  // drags that start inside an input and release outside the card don't
+  // count as a backdrop click and dismiss the modal — that's what was
+  // making the window "flash" on what felt like random clicks.
+  const handleBackdropMouseDown = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) onClose()
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-      onClick={onClose}
+      onMouseDown={handleBackdropMouseDown}
     >
       <div
         className="bg-bg border border-border rounded-xl shadow-2xl w-full max-w-xl max-h-[85vh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border">
@@ -263,18 +335,17 @@ export function WorkspaceAIConfigModal({ wsId, onClose }: Props) {
           </div>
 
           {tab === 'codex' && (
-            <div>
-              <label className="block text-xs font-medium text-text-muted mb-1">
-                Wire Format
-              </label>
-              <select
-                value={form.wireApi}
-                onChange={(e) => setForm({ ...form, wireApi: e.target.value as 'chat' | 'responses' })}
-                className={inputClass}
-              >
-                <option value="responses">responses (OpenAI Responses API — required by codex ≥ 0.130)</option>
-                <option value="chat">chat (legacy, OpenAI Chat Completions — removed in codex 0.130+)</option>
-              </select>
+            <div className="rounded-md border border-border bg-bg-secondary/50 px-3 py-2.5 space-y-2">
+              <p className="text-[12px] text-text-muted leading-relaxed">
+                <strong className="text-text">Wire format is locked to <code className="font-mono text-[11.5px]">responses</code>.</strong>{' '}
+                Codex 0.130+ hard-rejects <code className="font-mono text-[11.5px]">wire_api = "chat"</code> and only speaks the OpenAI Responses API.
+              </p>
+              <p className="text-[12px] text-text-muted leading-relaxed">
+                <strong className="text-text">Chat-only providers</strong> (DeepSeek, Qwen, Moonshot, GLM, LM Studio, vLLM, llama.cpp, etc.) don't expose a Responses endpoint and won't work here directly.
+                Run a translation proxy and point Base URL at it — e.g.{' '}
+                <strong className="text-text">OpenRouter</strong> (hosted, BYOK) or{' '}
+                <strong className="text-text">VibeAround</strong> (local) both speak Responses on the wire and forward to Chat Completions backends.
+              </p>
             </div>
           )}
 
@@ -286,6 +357,34 @@ export function WorkspaceAIConfigModal({ wsId, onClose }: Props) {
           {savedFlash && (
             <div className="rounded-md border border-green/40 bg-green/10 text-green text-[12px] px-3 py-2">
               Saved. Pause + resume any open session to reload.
+            </div>
+          )}
+          {testing && (
+            <div className="rounded-md border border-border bg-bg-secondary text-text-muted text-[12px] px-3 py-2">
+              Testing…
+            </div>
+          )}
+          {!testing && result?.kind === 'pass' && resultMatchesCurrent && (
+            <div className="rounded-md border border-green/40 bg-green/10 text-green text-[12px] px-3 py-2">
+              <div className="font-medium mb-0.5">
+                Test passed — {tab === 'claude' ? 'Anthropic' : 'OpenAI'} replied:
+              </div>
+              <div className="text-text whitespace-pre-wrap break-words font-mono text-[11.5px]">
+                {result.message || '(empty reply)'}
+              </div>
+            </div>
+          )}
+          {!testing && result?.kind === 'fail' && resultMatchesCurrent && (
+            <div className="rounded-md border border-red/40 bg-red/10 text-red text-[12px] px-3 py-2">
+              <div className="font-medium mb-0.5">Test failed:</div>
+              <div className="whitespace-pre-wrap break-words font-mono text-[11.5px]">
+                {result.message}
+              </div>
+            </div>
+          )}
+          {!testing && result && !resultMatchesCurrent && (
+            <div className="rounded-md border border-yellow-400/30 bg-yellow-400/5 text-yellow-400/90 text-[12px] px-3 py-2">
+              Form changed since last test — re-test before saving.
             </div>
           )}
 
@@ -300,13 +399,23 @@ export function WorkspaceAIConfigModal({ wsId, onClose }: Props) {
 
         {/* Footer */}
         <div className="flex items-center justify-between gap-2 p-3 border-t border-border bg-bg-secondary/30">
-          <button
-            onClick={handleReset}
-            disabled={saving}
-            className="px-3 py-2 rounded-md border border-border text-text-muted hover:text-text text-[12px] disabled:opacity-40"
-          >
-            Reset to global default
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleReset}
+              disabled={saving}
+              className="px-3 py-2 rounded-md border border-border text-text-muted hover:text-text text-[12px] disabled:opacity-40"
+            >
+              Reset to global default
+            </button>
+            <button
+              onClick={handleTest}
+              disabled={!canTest || testing || saving}
+              title={!canTest ? 'Fill base URL, API key, and model first' : undefined}
+              className="px-3 py-2 rounded-md border border-border text-text-muted hover:text-text text-[12px] disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {testing ? 'Testing…' : 'Test'}
+            </button>
+          </div>
           <div className="flex gap-2">
             <button
               onClick={onClose}
@@ -317,7 +426,14 @@ export function WorkspaceAIConfigModal({ wsId, onClose }: Props) {
             </button>
             <button
               onClick={handleSave}
-              disabled={saving || !dirty}
+              disabled={saving || !dirty || !testPassedForCurrent}
+              title={
+                !dirty
+                  ? undefined
+                  : !testPassedForCurrent
+                  ? 'Click Test and get a passing reply before saving'
+                  : undefined
+              }
               className="px-4 py-2 rounded-md bg-accent text-bg text-[13px] font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-accent/90 transition-colors"
             >
               {saving ? 'Saving…' : 'Save'}
