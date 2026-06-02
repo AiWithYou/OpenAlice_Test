@@ -80,7 +80,7 @@ If unsure about the symbol, use marketSearchForResearch to find it.`,
         period: z.enum(['annual', 'quarter']).optional().describe('Fiscal period for the historical series (default: annual)'),
         limit: z.number().int().positive().optional().describe('Number of historical periods to return (default: 5; ignored when ttm="only")'),
         ttm: z.enum(['include', 'exclude', 'only']).optional().describe('TTM handling: "include" (default — TTM + history), "exclude" (history only), "only" (TTM snapshot only)'),
-      }),
+      }).meta({ examples: [{ symbol: 'AAPL', period: 'annual', limit: 5 }] }),
       execute: async ({ symbol, period, limit, ttm }) => {
         // The FMP fetcher defaults ttm to "only" (a single TTM row, with
         // period/limit dead). Default to "include" here so the historical

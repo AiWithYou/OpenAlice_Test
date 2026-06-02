@@ -392,10 +392,28 @@ function ToolExecutePanel({ detail, result, onResult }: ToolExecutePanelProps) {
   const [inputs, setInputs] = useState<Record<string, string>>({})
   const [executing, setExecuting] = useState(false)
 
-  // Reset inputs when tool changes
+  // Reset inputs when tool changes — seed from the tool's declared example
+  // input (`inputSchema.examples[0]`, set via `.meta({ examples: [...] })` at
+  // the tool definition) so the form is pre-filled with a runnable sample
+  // instead of blank. Falls back to empty when a tool declares no example.
   useEffect(() => {
-    setInputs({})
-  }, [detail.name])
+    const schema = detail.inputSchema as { examples?: Array<Record<string, unknown>> }
+    const example = schema.examples?.[0]
+    if (!example) {
+      setInputs({})
+      return
+    }
+    const seeded: Record<string, string> = {}
+    for (const [key, value] of Object.entries(example)) {
+      seeded[key] =
+        typeof value === 'string'
+          ? value
+          : value != null && typeof value === 'object'
+            ? JSON.stringify(value)
+            : String(value)
+    }
+    setInputs(seeded)
+  }, [detail.name, detail.inputSchema])
 
   const properties = useMemo(() => {
     const schema = detail.inputSchema as {
