@@ -185,16 +185,22 @@ export function WorkspaceAIConfigModal({ wsId, onClose }: Props) {
   const applyCredential = () => {
     const cred = credentials.find((x) => x.slug === pickedCredential)
     if (!cred) return
-    // A credential carries no model — that's a per-workspace choice — so we
-    // flash baseUrl + key only and leave the model field for the user.
+    // A credential carries no model, so default it to the matched provider's
+    // first model — a stale model from a previous provider (e.g. minimax-m3 left
+    // on a GLM endpoint) would 404. The user can still pick another from the
+    // combobox below.
+    const vendorP = vendorPreset(cred.vendor, presets)
+    const defaultModel = vendorP ? (presetModels(vendorP)[0]?.id ?? '') : ''
     // Auth mode: api.minimax.io needs Bearer; default x-api-key otherwise.
     const bearer = /api\.minimax\.io/i.test(cred.baseUrl ?? '')
     setForm({
       ...form,
       baseUrl: cred.baseUrl ?? '',
       apiKey: cred.apiKey ?? '',
+      model: defaultModel,
       authMode: bearer ? 'bearer' : 'x-api-key',
     })
+    gate.reset() // a new provider invalidates any prior test verdict
   }
 
   const handleSave = async () => {
