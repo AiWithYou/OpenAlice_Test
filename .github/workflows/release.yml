@@ -149,7 +149,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, macos-13, windows-latest] # arm64 dmg / x64 dmg / x64 nsis
+        # macos-13 (Intel/x64) dropped: GitHub's x64 mac runners queue for
+        # tens of minutes and routinely never allocate, hanging the whole
+        # release run — and Intel Macs are a shrinking base Apple stopped
+        # selling in 2023 (arm64 covers every Mac since). Re-add if real
+        # demand appears, ideally cross-built off the arm64 runner.
+        os: [macos-14, windows-latest] # arm64 dmg / x64 nsis
     runs-on: ${{ matrix.os }}
     permissions:
       contents: write # upload release assets
