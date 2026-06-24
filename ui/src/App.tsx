@@ -130,10 +130,23 @@ function AppShell() {
 
   useEffect(() => {
     if (!showSidebarPanel || !selectedSidebar) return
+    const target = `${resolveSidebarWidth(selectedSidebar, sidebarWidths)}px`
     programmaticResize.current = true
-    sidebarRef.current?.resize(`${resolveSidebarWidth(selectedSidebar, sidebarWidths)}px`)
-    const raf = requestAnimationFrame(() => { programmaticResize.current = false })
-    return () => cancelAnimationFrame(raf)
+    // Defer one frame and guard with try/catch: calling resize() on a
+    // freshly-mounted panel throws "Layout not found for Panel sidebar"
+    // because the group's layout isn't registered until after the first
+    // layout pass. The Panel's px `defaultSize` already gives the correct
+    // width on first mount, so this imperative resize only needs to succeed
+    // on activity switches (where the panel stays mounted and layout exists).
+    const apply = requestAnimationFrame(() => {
+      try {
+        sidebarRef.current?.resize(target)
+      } catch {
+        /* layout not ready yet — defaultSize covers the initial mount */
+      }
+    })
+    const clear = requestAnimationFrame(() => { programmaticResize.current = false })
+    return () => { cancelAnimationFrame(apply); cancelAnimationFrame(clear) }
     // Re-apply when the activity changes (sidebarWidths intentionally not a
     // dep — a persist write shouldn't trigger a re-resize loop).
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -188,7 +201,11 @@ function AppShell() {
 
         <Group
           orientation="horizontal"
-          id="main-layout"
+          // Layout-cache version. Bump this whenever the panel structure /
+          // sizing model changes so clients don't apply a stale persisted
+          // layout. v2: moved from a single global percent split
+          // (useDefaultLayout) to per-activity px widths (live/sidebar-width).
+          id="main-layout-v2"
           className="flex-1 min-h-0"
         >
           {showSidebarPanel && section && (
