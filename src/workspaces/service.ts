@@ -27,11 +27,18 @@ import { runHeadlessTask, type HeadlessTaskResult } from './headless-task.js';
 import { ScheduleMarkerStore } from './schedule/marker-store.js';
 import { ScheduleScanner, DEFAULT_INTERVAL_MS } from './schedule/scanner.js';
 import {
-  readScheduleDeclaration,
-  snapshotTask,
+  readWorkspaceIssues,
+  snapshotScheduledIssue,
   type ScheduleSnapshot,
+  type ScheduleSnapshotTask,
   type ScheduleSnapshotWorkspace,
 } from './schedule/declaration.js';
+import {
+  snapshotBoardIssue,
+  type IssuesSnapshot,
+  type IssuesSnapshotIssue,
+  type IssuesSnapshotWorkspace,
+} from './issues/board.js';
 import { HeadlessTaskRegistry, headlessLogPaths } from './headless-task-registry.js';
 
 /** Max concurrent in-flight headless tasks — backstop against unbounded spawn. */
@@ -141,9 +148,14 @@ export interface WorkspaceService {
     prompt: string,
     timeoutMs: number,
   ): Promise<{ taskId: string }>;
-  /** Read-only snapshot of every workspace's declared `.alice/issue.json` +
-   *  each task's last-fired marker and computed next-due. Powers GET /api/schedule. */
+  /** Read-only scheduling projection of every workspace's `.alice/issues/`
+   *  directory (scheduled issues only) + each task's last-fired marker and
+   *  computed next-due. Powers GET /api/schedule. */
   scheduleSnapshot(): Promise<ScheduleSnapshot>;
+  /** Read-only snapshot of every workspace's `.alice/issues/` directory — ALL
+   *  issues (scheduled or not), scheduled ones enriched with firing markers.
+   *  Powers the global Issue board GET /api/issues. */
+  issuesSnapshot(): Promise<IssuesSnapshot>;
   /** The headless-task management plane (cross-workspace; powers GET /api/headless). */
   headlessTasks: HeadlessTaskRegistry;
   /** Where dispatched tasks' full stdout/stderr logs land (read by the output route). */
@@ -481,8 +493,9 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     return { taskId: rec.taskId };
   };
 
-  // ── Workspace self-scheduling. Scan each workspace's own `.alice/issue.json`
-  // and fire due tasks as headless runs through the SAME dispatch primitive. The
+  // ── Workspace self-scheduling. Scan each workspace's own `.alice/issues/*.md`
+  // files and fire due SCHEDULED issues as headless runs through the SAME dispatch
+  // primitive (issues without a `when` are pure board items, ignored here). The
   // scanner owns its own tick (infra periodicity, NOT a scheduled task) and
   // persists only a last-fired marker — never the schedule itself, which lives
   // solely in the workspace's file.
@@ -512,7 +525,7 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     const nowMs = Date.now();
     const workspaces = await Promise.all(
       registry.list().map(async (ws): Promise<ScheduleSnapshotWorkspace> => {
-        const res = await readScheduleDeclaration(ws.dir);
+        const res = await readWorkspaceIssues(ws.dir);
         if (!res.ok) {
           return {
             wsId: ws.id,
@@ -522,14 +535,64 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
             tasks: [],
           };
         }
-        return {
-          wsId: ws.id,
-          tag: ws.tag,
-          status: 'ok',
-          tasks: res.tasks.map((t) =>
-            snapshotTask(t, scheduleMarkers.get(ws.id, t.id) ?? null, nowMs, DEFAULT_INTERVAL_MS),
-          ),
-        };
+        const tasks: ScheduleSnapshotTask[] = [];
+        for (const issue of res.issues) {
+          // Only SCHEDULED issues (those carrying a `when`) reach the schedule
+          // snapshot; unscheduled issues are pure board work items.
+          if (!issue.when) continue;
+          tasks.push(
+            snapshotScheduledIssue(
+              issue,
+              issue.when,
+              scheduleMarkers.get(ws.id, issue.id) ?? null,
+              nowMs,
+              DEFAULT_INTERVAL_MS,
+            ),
+          );
+        }
+        return { wsId: ws.id, tag: ws.tag, status: 'ok', tasks };
+      }),
+    );
+    return { workspaces };
+  };
+
+  // Read-only aggregation for the global Issue board (GET /api/issues). Mirrors
+  // scheduleSnapshot's cold path, but returns ALL issues (not just scheduled
+  // ones) and the board's two-valued status. Always a live read: the scanner's
+  // warm cache holds only the SCHEDULED projection, so it can't reconstruct the
+  // board's unscheduled work items — and the board is a low-frequency poll.
+  const issuesSnapshot = async (): Promise<IssuesSnapshot> => {
+    const nowMs = Date.now();
+    const workspaces = await Promise.all(
+      registry.list().map(async (ws): Promise<IssuesSnapshotWorkspace> => {
+        const res = await readWorkspaceIssues(ws.dir);
+        if (!res.ok) {
+          // 'absent' (no issues dir) is an empty board for that workspace, not an
+          // error; only a genuinely unreadable dir (e.g. retired issue.json) is
+          // surfaced as 'invalid' with its actionable hint.
+          if (res.reason === 'absent') {
+            return { wsId: ws.id, tag: ws.tag, status: 'ok', issues: [] };
+          }
+          return { wsId: ws.id, tag: ws.tag, status: 'invalid', error: res.error, issues: [] };
+        }
+        const issues: IssuesSnapshotIssue[] = res.issues.map((issue) => {
+          // Unscheduled ⇒ pure board work item, no firing markers.
+          if (!issue.when) return snapshotBoardIssue(issue, null);
+          // Scheduled ⇒ reuse the schedule snapshot's math so the board's
+          // last/next match the Schedules dashboard exactly.
+          const fired = snapshotScheduledIssue(
+            issue,
+            issue.when,
+            scheduleMarkers.get(ws.id, issue.id) ?? null,
+            nowMs,
+            DEFAULT_INTERVAL_MS,
+          );
+          return snapshotBoardIssue(issue, {
+            lastFiredAtMs: fired.lastFiredAtMs,
+            nextDueAtMs: fired.nextDueAtMs,
+          });
+        });
+        return { wsId: ws.id, tag: ws.tag, status: 'ok', issues };
       }),
     );
     return { workspaces };
@@ -716,6 +779,7 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     runHeadlessTask: runHeadlessTaskMethod,
     dispatchHeadlessTask: dispatchHeadlessTaskMethod,
     scheduleSnapshot,
+    issuesSnapshot,
     headlessTasks,
     headlessLogsDir,
     isShuttingDown: () => shuttingDown,

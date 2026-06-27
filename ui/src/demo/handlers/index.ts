@@ -6,6 +6,7 @@ import { inboxHandlers } from './inbox'
 import { entitiesHandlers } from './entities'
 import { personaHeartbeatHandlers } from './personaHeartbeat'
 import { scheduleHandlers } from './schedule'
+import { issuesHandlers } from './issues'
 import { toolsSimulatorHandlers } from './toolsSimulator'
 import { marketHandlers } from './market'
 import { configKeysHandlers } from './configKeys'
@@ -27,6 +28,7 @@ export const handlers = [
   ...entitiesHandlers,
   ...personaHeartbeatHandlers,
   ...scheduleHandlers,
+  ...issuesHandlers,
   ...toolsSimulatorHandlers,
   ...marketHandlers,
   ...configKeysHandlers,

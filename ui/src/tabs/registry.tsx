@@ -3,6 +3,7 @@ import type { Workspace } from '../components/workspace/api'
 import type { ViewKind, ViewSpec } from './types'
 
 import { PortfolioPage } from '../pages/PortfolioPage'
+import { IssuePage } from '../pages/IssuePage'
 import { AutomationPage } from '../pages/AutomationPage'
 import { NewsPage } from '../pages/NewsPage'
 import { MarketPage } from '../pages/MarketPage'
@@ -65,11 +66,17 @@ const portfolioModule: ViewModule<'portfolio'> = {
   Component: () => <PortfolioPage />,
 }
 
+const issueModule: ViewModule<'issue'> = {
+  kind: 'issue',
+  title: () => 'Issues',
+  toUrl: () => '/issues',
+  Component: () => <IssuePage />,
+}
+
 const automationSectionTitle: Record<
   Extract<ViewSpec, { kind: 'automation' }>['params']['section'],
   string
 > = {
-  schedules: 'Schedules',
   runs: 'Runs',
   api: 'API',
   flow: 'Flow',
@@ -252,6 +259,7 @@ const fileViewerModule: ViewModule<'file-viewer'> = {
 
 export const VIEWS = {
   portfolio: portfolioModule,
+  issue: issueModule,
   automation: automationModule,
   news: newsModule,
   'market-list': marketListModule,

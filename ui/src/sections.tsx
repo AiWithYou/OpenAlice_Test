@@ -30,9 +30,10 @@ import { DevCategoryList } from './components/DevCategoryList'
 import { MarketSidebar } from './components/MarketSidebar'
 import { PortfolioSidebar } from './components/PortfolioSidebar'
 import { AutomationSidebar } from './components/AutomationSidebar'
+import { IssuesSidebar } from './components/IssuesSidebar'
 import type { ActivitySection } from './tabs/types'
 
-type NavTitleKey = 'nav.item.chat' | 'nav.item.inbox' | 'nav.item.tracked' | 'nav.item.workspaces' | 'nav.item.tradingAsGit' | 'nav.item.settings' | 'nav.item.dev' | 'nav.item.market' | 'nav.item.portfolio' | 'nav.item.automation'
+type NavTitleKey = 'nav.item.chat' | 'nav.item.inbox' | 'nav.item.tracked' | 'nav.item.workspaces' | 'nav.item.tradingAsGit' | 'nav.item.settings' | 'nav.item.dev' | 'nav.item.market' | 'nav.item.portfolio' | 'nav.item.issue' | 'nav.item.automation'
 
 export interface SidebarSection {
   /** Header title shown at the top of the sidebar. */
@@ -88,6 +89,10 @@ const SECTION_BY_KEY: Partial<Record<ActivitySection, SidebarSection>> = {
   portfolio: {
     titleKey: 'nav.item.portfolio',
     Secondary: PortfolioSidebar,
+  },
+  issue: {
+    titleKey: 'nav.item.issue',
+    Secondary: IssuesSidebar,
   },
   automation: {
     titleKey: 'nav.item.automation',
