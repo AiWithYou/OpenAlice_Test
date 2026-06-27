@@ -41,4 +41,16 @@ export const configKeysHandlers = [
   http.put('/api/config/credentials/:slug', () => HttpResponse.json({ slug: 'custom-1' })),
   http.delete('/api/config/credentials/:slug', () => HttpResponse.json({ success: true })),
   http.post('/api/config/credentials/test', () => HttpResponse.json({ ok: true, response: 'Hi!' })),
+
+  // Per-agent default workspace credentials (AI Provider page)
+  http.get('/api/config/workspace-credential-defaults', () =>
+    HttpResponse.json({
+      defaults: {},
+      compatibleByAgent: { claude: [], codex: [], opencode: [], pi: [] },
+    }),
+  ),
+  http.put('/api/config/workspace-credential-defaults', async ({ request }) => {
+    const body = (await request.json().catch(() => ({}))) as { defaults?: unknown }
+    return HttpResponse.json({ defaults: body.defaults ?? {} })
+  }),
 ]
