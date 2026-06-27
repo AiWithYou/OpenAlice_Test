@@ -51,10 +51,12 @@ You have two equivalent paths, and both write the **same**
 ### CLI verbs
 
 ```bash
-# list — every issue on this workspace's board, as compact rows
+# list — scan the WHOLE board: every workspace's issues as compact title rows
 alice-workspace issue list
 
-# show — one issue in full: frontmatter + body (including any ## Comments)
+# show — one issue in full, resolved by its (global) name: frontmatter + body +
+# run history + inbox reports. --id takes a name OR id and resolves across the
+# board; a name two workspaces share returns the candidates to pick from.
 alice-workspace issue show --id morning-scan
 
 # create — a new issue. --title is required; --id is derived as a kebab slug
@@ -84,9 +86,14 @@ alice-workspace issue create --title "Pre-market brief" --priority high \
   --agent claude
 ```
 
-The verb set is `list` / `show` / `create` / `update` / `comment` — there is no
-`delete` verb; remove an issue by deleting its file (see Notes). The examples
-below show the on-disk file shape the CLI and your direct edits both produce.
+The verb set is `list` / `show` / `create` / `update` / `comment` (no `delete` —
+remove an issue by deleting its file, see Notes). **Reads are global, writes are
+local:** `list` and `show` read the whole board across **every** workspace —
+scan titles with `list`, decide which matter, then `show <name>` to read those
+in full (the natural way to work a board) — while `create` / `update` /
+`comment` write **this** workspace's own `.alice/issues/` files (changing a
+peer's board is the human-approved peer-edit path). The examples below show the
+on-disk file shape the CLI and your direct edits both produce.
 
 ## Example — a scheduled issue (`.alice/issues/morning-scan.md`)
 
