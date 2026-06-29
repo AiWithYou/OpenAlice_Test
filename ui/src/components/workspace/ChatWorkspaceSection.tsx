@@ -86,7 +86,11 @@ export function ChatWorkspaceSection(): ReactElement | null {
     }
   }
 
-  if (!chatTemplate) return null
+  // Don't collapse the whole section while templates are still loading — doing
+  // so hid the cold-load skeleton (and the New-chat CTA) during the exact 30s
+  // window we want to fill, leaving a blank pane. Only bail once templates are
+  // known-loaded AND there genuinely is no chat template (broken deployment).
+  if (ctx.templatesLoaded && !chatTemplate) return null
 
   const todayLabel = t('chat.today')
   const yesterdayLabel = t('chat.yesterday')

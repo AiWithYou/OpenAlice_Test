@@ -65,6 +65,12 @@ interface WorkspacesContextValue {
    *  empty list means "not loaded yet", not "no workspaces" — the sidebar shows
    *  a skeleton instead of a blank pane / empty state. */
   readonly hasLoaded: boolean
+  /** True once the templates fetch has settled (success OR failure). Until then
+   *  an empty `templates` means "not loaded yet", not "no templates" — surfaces
+   *  that null-render or show a "no X configured" state when a template is
+   *  missing MUST gate on this, or they collapse to a blank pane during the
+   *  cold-start window (e.g. the Ask Alice sidebar hides its own skeleton). */
+  readonly templatesLoaded: boolean
   refresh(): void
   spawn(wsId: string, opts?: SpawnOpts): Promise<void>
   /**
@@ -90,6 +96,7 @@ const WorkspacesContext = createContext<WorkspacesContextValue | null>(null)
 export function WorkspacesProvider({ children }: { children: ReactNode }) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [templates, setTemplates] = useState<TemplateInfo[]>([])
+  const [templatesLoaded, setTemplatesLoaded] = useState(false)
   const [agents, setAgents] = useState<AgentInfo[]>([])
   const [listError, setListError] = useState<string | null>(null)
   // Don't reconcile orphan tabs until we've successfully fetched the
@@ -126,7 +133,10 @@ export function WorkspacesProvider({ children }: { children: ReactNode }) {
   }, [refresh])
 
   useEffect(() => {
-    void listTemplates().then(setTemplates).catch(() => setTemplates([]))
+    void listTemplates()
+      .then(setTemplates)
+      .catch(() => setTemplates([]))
+      .finally(() => setTemplatesLoaded(true))
     void listAgents().then(setAgents).catch(() => setAgents([]))
   }, [])
 
@@ -308,6 +318,7 @@ export function WorkspacesProvider({ children }: { children: ReactNode }) {
         agents,
         listError,
         hasLoaded,
+        templatesLoaded,
         refresh,
         spawn,
         quickChat,
