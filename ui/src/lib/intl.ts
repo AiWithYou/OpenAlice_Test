@@ -4,11 +4,10 @@
  * formatter that replaces the ~10 hand-rolled `timeAgo`/`relativeTime` copies
  * that used to live one-per-component (each pinned to English).
  *
- * Stage relationship: this module is framework-agnostic. Today `_appLocale`
- * stays 'en', so every formatter renders exactly as it did before (en-US).
- * When the i18n locale store lands (Stage 2), it subscribes and calls
- * `setAppLocale()` on every change, and the money/number/date helpers that
- * read `getIntlLocale()` start following the user's language for free.
+ * Stage relationship: this module is framework-agnostic. The app-locale default
+ * is `ja` in this Japan-market build; the i18n store calls `setAppLocale()` at
+ * boot and whenever the user switches languages, and the money/number/date
+ * helpers that read `getIntlLocale()` follow that choice.
  *
  * Scope note: this is UI-chrome formatting only. It must never be wired to
  * slug/identifier generation (e.g. ChatWorkspaceSection's month-based
@@ -26,9 +25,9 @@ const BCP47: Record<AppLocale, string> = {
   'zh-Hant': 'zh-Hant',
 }
 
-let _appLocale: AppLocale = 'en'
+let _appLocale: AppLocale = 'ja'
 
-/** Set by the locale store (Stage 2). Until then `_appLocale` stays 'en'. */
+/** Set by the locale store at boot and whenever the user switches languages. */
 export function setAppLocale(locale: AppLocale): void {
   _appLocale = locale
 }
