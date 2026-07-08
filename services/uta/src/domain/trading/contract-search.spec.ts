@@ -45,6 +45,7 @@ describe('searchTradeableContracts — data-source participation', () => {
   it('normalizes Yahoo-style Japanese equity symbols before broker search', async () => {
     expect(normalizeBrokerSearchPattern('7203.T', 'equity')).toBe('7203')
     expect(normalizeBrokerSearchPattern('6758.t', 'equity')).toBe('6758')
+    expect(normalizeBrokerSearchPattern('130A.T', 'equity')).toBe('130A')
     expect(normalizeBrokerSearchPattern('AAPL', 'equity')).toBe('AAPL')
   })
 
