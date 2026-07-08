@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { ContractDescription } from '@traderalice/ibkr'
 import { searchTradeableContracts } from './contract-search.js'
+import { normalizeBrokerSearchPattern } from './contract-search-rules.js'
 import { UTAManager } from './uta-manager.js'
 import { UnifiedTradingAccount } from './UnifiedTradingAccount.js'
 import { MockBroker, makeContract } from './brokers/mock/index.js'
@@ -39,5 +40,22 @@ describe('searchTradeableContracts — data-source participation', () => {
     const hits = await searchTradeableContracts(manager, 'AAPL', 'unknown', 'disabled')
     expect(hits.map((h) => h.source)).toEqual(['disabled'])
     expect(disabledSearch).toHaveBeenCalledOnce()
+  })
+
+  it('normalizes Yahoo-style Japanese equity symbols before broker search', async () => {
+    expect(normalizeBrokerSearchPattern('7203.T', 'equity')).toBe('7203')
+    expect(normalizeBrokerSearchPattern('6758.t', 'equity')).toBe('6758')
+    expect(normalizeBrokerSearchPattern('AAPL', 'equity')).toBe('AAPL')
+  })
+
+  it('passes the normalized Japanese ticker to configured brokers', async () => {
+    const manager = new UTAManager()
+    const broker = new MockBroker({ id: 'jp' })
+    const search = vi.spyOn(broker, 'searchContracts').mockResolvedValue([makeDesc('jp|7203')])
+
+    manager.add(new UnifiedTradingAccount(broker))
+
+    await searchTradeableContracts(manager, '7203.T', 'equity')
+    expect(search).toHaveBeenCalledWith('7203')
   })
 })
