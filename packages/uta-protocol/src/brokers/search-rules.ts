@@ -22,13 +22,17 @@ const QUOTE_SUFFIX_RE = new RegExp(
   'i',
 )
 
+const JP_YAHOO_EQUITY_RE = /^(\d{4}[A-Z]?)\.T$/i
+
 /**
  * Translate a data-vendor symbol into the pattern the broker layer
  * actually understands.
  *
- * - equity / commodity / unknown → identity (vendor and broker agree)
- * - crypto / currency → strip a known quote-currency suffix when the
- *   remaining base is at least two characters; otherwise identity.
+ * - US equity / commodity / unknown → identity (vendor and broker usually agree)
+ * - Japanese Yahoo Finance equities (7203.T, 6758.T) → strip the `.T` suffix;
+ *   TSE/JPX-capable brokers such as IBKR search by local security code.
+ * - crypto / currency → strip a known quote-currency suffix when the remaining
+ *   base is at least two characters; otherwise identity.
  *
  * This function is intentionally minimal. See `contract-search-rules.md`
  * for what to add and what to leave alone.
@@ -46,7 +50,10 @@ export function normalizeBrokerSearchPattern(
       const m = trimmed.match(QUOTE_SUFFIX_RE)
       return m ? m[1].toUpperCase() : trimmed
     }
-    case 'equity':
+    case 'equity': {
+      const jp = trimmed.match(JP_YAHOO_EQUITY_RE)
+      return jp ? jp[1].toUpperCase() : trimmed
+    }
     case 'commodity':
     case 'unknown':
     default:
