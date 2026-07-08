@@ -5,7 +5,8 @@
  * provider config. Used both by the AI tool (marketSearchForResearch) and the
  * HTTP route (/api/market/search) — both surfaces must return the same thing.
  *
- * equity    — SymbolIndex (SEC/TMX local cache, regex, zero-latency)
+ * equity    — SymbolIndex (SEC/TMX local cache, regex, zero-latency) + JPX/TSE
+ *             Yahoo-style code synthesis for Japanese stocks such as 7203.T
  * commodity — CommodityCatalog (canonical catalog, ~25 items)
  * crypto    — cryptoClient.search on yfinance (online fuzzy)
  * currency  — currencyClient.search on yfinance (online fuzzy, XXXUSD filter)
@@ -43,6 +44,28 @@ export interface MarketSearchResult {
    *  (they fall back to the configured per-asset provider). */
   sourceId?: string
   [key: string]: unknown
+}
+
+const JP_TSE_CODE_RE = /^\d[0-9A-Z]{3}$/i
+const JP_YAHOO_TSE_RE = /^(\d[0-9A-Z]{3})\.T$/i
+
+function normalizeJapaneseEquityTicker(query: string): string | null {
+  const q = query.trim().toUpperCase()
+  if (JP_YAHOO_TSE_RE.test(q)) return q
+  if (JP_TSE_CODE_RE.test(q)) return `${q}.T`
+  return null
+}
+
+function makeJapaneseEquityHint(symbol: string, sourceId: string): MarketSearchResult {
+  const code = symbol.replace(/\.T$/i, '')
+  return {
+    symbol,
+    name: `JPX/TSE ${code}`,
+    assetClass: 'equity',
+    sourceId,
+    exchange: 'JPX/TSE',
+    country: 'Japan',
+  }
 }
 
 /**
@@ -93,6 +116,14 @@ export async function aggregateSymbolSearch(
     .search(q, limit)
     .map((r) => ({ ...r, assetClass: 'equity' as const, sourceId: primaryEquity }))
 
+  // Japan-market path: if the user enters a local JPX/TSE security code, surface
+  // its Yahoo Finance form immediately. This makes "7203" / "7203.T" work even
+  // when yfinance fuzzy search does not return a localized-name hit.
+  const japaneseTicker = normalizeJapaneseEquityTicker(q)
+  const japanEquityResults = japaneseTicker
+    ? [makeJapaneseEquityHint(japaneseTicker, primaryEquity)]
+    : []
+
   const commodityResults = deps.commodityCatalog
     .search(q, limit)
     .map((r) => ({ ...r, assetClass: 'commodity' as const }))
@@ -129,11 +160,12 @@ export async function aggregateSymbolSearch(
     .map((r) => ({ ...r, assetClass: 'currency' as const }))
 
   // Merge equity online hits, de-duped WITHIN each vendor's namespace by
-  // `vendor|symbol` (the SEC index already seeded the primary vendor's keys, so
-  // a US name doesn't double up). Cross-vendor redundancy is intentional —
-  // 600519.SS (yfinance) and 1.600519 (eastmoney) are different sources.
+  // `vendor|symbol` (the SEC index and JP local-code hints already seeded the
+  // primary vendor's keys, so obvious duplicates don't double up). Cross-vendor
+  // redundancy is intentional — 600519.SS (yfinance) and 1.600519 (eastmoney)
+  // are different sources.
   const seenEquity = new Set(
-    equityResults.map((r) => `${r.sourceId}|${String((r as Record<string, unknown>).symbol ?? '').toUpperCase()}`),
+    [...equityResults, ...japanEquityResults].map((r) => `${r.sourceId}|${String((r as Record<string, unknown>).symbol ?? '').toUpperCase()}`),
   )
   const equityOnlineResults: MarketSearchResult[] = []
   for (const settled of equitySettled) {
@@ -150,6 +182,7 @@ export async function aggregateSymbolSearch(
 
   const all: MarketSearchResult[] = [
     ...equityResults,
+    ...japanEquityResults,
     ...equityOnlineResults,
     ...cryptoResults,
     ...currencyResults,
