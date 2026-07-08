@@ -22,7 +22,7 @@ export function MarketPage() {
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <PageHeader title="Market" description="Search assets and view price history." />
+      <PageHeader title="マーケット" description="日本株・米国株を検索し、価格推移・ファンダメンタル・指標を確認します。" />
       <div className="flex-1 flex flex-col gap-6 px-4 md:px-8 py-4 min-h-0 overflow-y-auto">
         <SearchBox />
 
@@ -55,10 +55,10 @@ export function MarketPage() {
         </div>
 
         <div className="flex-1 flex flex-col items-center justify-center text-center gap-2">
-          <div className="text-[14px] text-text-muted">Pick an asset to begin.</div>
+          <div className="text-[14px] text-text-muted">日本株または米国株を選択してください。</div>
           <div className="text-[12px] text-text-muted/60 max-w-md">
-            Search by ticker or name. Equities show profile, quote, candles, key metrics, and
-            financial statements. Other asset classes show price history only for now.
+            ティッカーまたは会社名で検索できます。日本株は 7203.T / 6758.T のような Yahoo Finance 形式、
+            米国株は AAPL / NVDA のようなティッカーを使います。
           </div>
         </div>
       </div>
