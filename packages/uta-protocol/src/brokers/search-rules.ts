@@ -22,15 +22,15 @@ const QUOTE_SUFFIX_RE = new RegExp(
   'i',
 )
 
-const JP_YAHOO_EQUITY_RE = /^(\d{4}[A-Z]?)\.T$/i
+const JP_YAHOO_EQUITY_RE = /^(\d[0-9A-Z]{3})\.T$/i
 
 /**
  * Translate a data-vendor symbol into the pattern the broker layer
  * actually understands.
  *
  * - US equity / commodity / unknown → identity (vendor and broker usually agree)
- * - Japanese Yahoo Finance equities (7203.T, 6758.T) → strip the `.T` suffix;
- *   TSE/JPX-capable brokers such as IBKR search by local security code.
+ * - Japanese Yahoo Finance equities (7203.T, 6758.T, 130A.T) → strip the `.T`
+ *   suffix; TSE/JPX-capable brokers such as IBKR search by local security code.
  * - crypto / currency → strip a known quote-currency suffix when the remaining
  *   base is at least two characters; otherwise identity.
  *
