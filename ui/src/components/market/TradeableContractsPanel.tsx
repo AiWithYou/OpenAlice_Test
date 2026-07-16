@@ -33,7 +33,10 @@ export function TradeableContractsPanel({ symbol, assetClass }: Props) {
     setLoading(true)
     setError(null)
     setExpanded(false)  // collapse on symbol/asset change
-    tradingApi.searchContracts(symbol, assetClass)
+    // Brokers generally classify exchange-traded funds under their stock/equity
+    // search surface even though the market workbench keeps ETF identity visible.
+    const brokerAssetClass = assetClass === 'etf' ? 'equity' : assetClass
+    tradingApi.searchContracts(symbol, brokerAssetClass)
       .then((res) => {
         if (cancelled) return
         setHits(res.results)
@@ -45,29 +48,29 @@ export function TradeableContractsPanel({ symbol, assetClass }: Props) {
   }, [symbol, assetClass])
 
   const info = [
-    'Endpoint: /api/trading/contracts/search',
-    'Heuristic broker-side fuzzy match — symbol on the analysis side is just a query string here, not the canonical id.',
-    'Tradeable identity is the broker\u2019s aliceId (alias:broker:exchange-id). Use it to actually place orders.',
+    'API: /api/trading/contracts/search',
+    '分析画面のシンボルを検索語として、設定済みブローカー上の売買可能な契約を照合します。',
+    '実際の売買ではブローカー固有の aliceId を使用します。',
   ].join('\n')
 
   return (
-    <Card title="Tradeable on configured brokers" info={info}>
-      {loading && <div className="text-[12px] text-text-muted">Searching brokers…</div>}
+    <Card title="設定済みブローカーの売買可能銘柄" info={info}>
+      {loading && <div className="text-[12px] text-text-muted">ブローカーを検索中…</div>}
       {error && !loading && <div className="text-[12px] text-red">{error}</div>}
 
       {!loading && !error && utasConfigured === 0 && (
         <div className="text-[12px] text-text-muted">
-          No trading accounts configured.{' '}
+          取引口座が設定されていません。{' '}
           <Link to="/trading" className="text-accent hover:underline">
-            Add one in Trading
+            取引設定を開く
           </Link>
-          {' '}to see matching contracts here.
+          と、ここに一致する契約が表示されます。
         </div>
       )}
 
       {!loading && !error && utasConfigured !== 0 && hits && hits.length === 0 && (
         <div className="text-[12px] text-text-muted">
-          No tradeable contracts matching <span className="font-mono">{symbol}</span> on your configured brokers.
+          設定済みブローカーに <span className="font-mono">{symbol}</span> と一致する売買可能な契約はありません。
         </div>
       )}
 
@@ -88,7 +91,7 @@ export function TradeableContractsPanel({ symbol, assetClass }: Props) {
                 onClick={() => setExpanded((v) => !v)}
                 className="mt-2 text-[11px] text-text-muted/70 hover:text-accent transition-colors cursor-pointer"
               >
-                {expanded ? `Show fewer` : `Show ${hidden} more (${sorted.length} total)`}
+                {expanded ? '表示を減らす' : `さらに${hidden}件表示（全${sorted.length}件）`}
               </button>
             )}
           </>
@@ -108,7 +111,7 @@ export function TradeableContractsPanel({ symbol, assetClass }: Props) {
 function instrumentTier(hit: ContractSearchHit): number {
   const c = hit.contract
   const sec = (c.secType ?? '').toUpperCase()
-  if (sec === 'STK') return 0
+  if (sec === 'STK' || sec === 'ETF') return 0
   if (sec === 'CRYPTO') return 1
   if (sec === 'CRYPTO_PERP') return 2
   if (sec === 'FUT') return 3
@@ -159,9 +162,9 @@ function ContractRow({ hit }: { hit: ContractSearchHit }) {
         <Link
           to={orderHref}
           className="text-[11px] text-accent hover:underline shrink-0"
-          title="Open order entry on the UTA"
+          title="このUTAの注文画面を開く"
         >
-          Order →
+          注文 →
         </Link>
       )}
     </li>
