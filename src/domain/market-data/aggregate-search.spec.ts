@@ -115,7 +115,34 @@ describe('aggregateSymbolSearch — Japan / US / ETF coverage', () => {
     expect(matches[0]).toMatchObject({ assetClass: 'etf', name: 'NEXT FUNDS TOPIX ETF' })
   })
 
-  it('degrades gracefully when the optional ETF client is not wired', async () => {
+  it('uses the embedded SDK model capability when no dedicated ETF client is injected', async () => {
+    const executeModel = vi.fn(async (model: string) =>
+      model === 'EtfSearch'
+        ? [{ symbol: 'QQQ', name: 'Invesco QQQ Trust' }]
+        : [],
+    )
+    const deps = makeDeps({
+      equityClient: {
+        search: vi.fn(async () => []),
+        executeModel,
+      } as unknown as MarketSearchDeps['equityClient'],
+    })
+    delete deps.etfClient
+
+    const out = await aggregateSymbolSearch(deps, 'QQQ')
+
+    expect(executeModel).toHaveBeenCalledWith('EtfSearch', {
+      query: 'QQQ',
+      provider: 'yfinance',
+    })
+    expect(out).toContainEqual(expect.objectContaining({
+      symbol: 'QQQ',
+      assetClass: 'etf',
+      sourceId: 'yfinance',
+    }))
+  })
+
+  it('degrades gracefully when neither ETF client nor SDK capability is available', async () => {
     const deps = makeDeps()
     delete deps.etfClient
 
