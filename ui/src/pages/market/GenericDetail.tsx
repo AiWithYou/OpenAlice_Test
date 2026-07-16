@@ -7,10 +7,18 @@ interface Props {
   assetClass: AssetClass
 }
 
+const ASSET_CLASS_LABELS: Record<AssetClass, string> = {
+  equity: '株式',
+  etf: 'ETF',
+  crypto: '暗号資産',
+  currency: '為替',
+  commodity: '商品',
+}
+
 /**
  * Fallback layout for asset classes that haven't earned a bespoke page yet.
- * Shows just the K-line — quote/fundamentals panels are equity-shaped and
- * would be misleading if forced onto crypto/currency/commodity.
+ * Shows the K-line and broker-contract bridge without forcing equity-only
+ * fundamentals onto ETFs, crypto, currencies, or commodities.
  */
 export function GenericDetail({ symbol, assetClass }: Props) {
   return (
@@ -18,10 +26,10 @@ export function GenericDetail({ symbol, assetClass }: Props) {
       <div className="flex items-end gap-2 px-1">
         <span className="text-[20px] font-semibold text-text tracking-tight">{symbol}</span>
         <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-bg-tertiary text-text-muted font-medium">
-          {assetClass}
+          {ASSET_CLASS_LABELS[assetClass]}
         </span>
         <span className="text-[11px] text-text-muted/70">
-          Detail layout coming — for now, price history only.
+          価格履歴と、設定済みブローカー上の売買可能銘柄を表示します。
         </span>
       </div>
       <div className="flex-1 min-h-[420px]">
