@@ -18,6 +18,19 @@
 
 ETFはYahoo Financeの銘柄種別判定を使って株式と分離します。価格履歴は株式と共通のOHLCV取得経路を利用しますが、画面、検索結果、URL、ウォッチリスト上では `ETF` として保持されます。
 
+## 動作要件
+
+- Node.js `22.19.0` 以上
+- pnpm `11.7.0`
+- Git
+
+Node.jsに同梱されるCorepackを使う場合は、次のコマンドでリポジトリ指定のpnpmを有効化できます。
+
+```bash
+corepack enable
+corepack prepare pnpm@11.7.0 --activate
+```
+
 ## 起動
 
 Node.jsとpnpmを用意したうえで実行します。
@@ -69,6 +82,25 @@ SPY、QQQ、1306.Tを比較し、構成と値動きの違いを整理して
 ```
 
 AIの統合市場検索は `equity`、`etf`、`crypto`、`currency`、`commodity` を区別して返します。実際に売買できる契約を探す場合は、マーケットデータ用シンボルではなくブローカー側の契約検索を使用します。
+
+## 検証
+
+変更後は、依存関係を固定した状態でビルドとテストを実行します。
+
+```bash
+pnpm install --frozen-lockfile
+pnpm build
+pnpm test
+```
+
+日本株・米国株・ETF対応に絞ったテストは次のとおりです。
+
+```bash
+pnpm exec vitest run \
+  src/domain/market-data/aggregate-search.spec.ts \
+  services/uta/src/domain/trading/contract-search-rules.spec.ts \
+  src/domain/market-data/bars/bar-service.spec.ts
+```
 
 ## 注意点
 
