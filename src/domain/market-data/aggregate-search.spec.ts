@@ -101,16 +101,18 @@ describe('aggregateSymbolSearch — Japan / US / ETF coverage', () => {
     expect(spy[0]).toMatchObject({ assetClass: 'etf', sourceId: 'yfinance' })
   })
 
-  it('classifies a Tokyo-listed ETF and replaces the generic JPX hint', async () => {
+  it('classifies a Tokyo-listed ETF and queries Yahoo with the normalized .T symbol', async () => {
+    const search = vi.fn(async () => [{ symbol: '1306.T', name: 'NEXT FUNDS TOPIX ETF' }])
     const deps = makeDeps({
       etfClient: {
-        search: vi.fn(async () => [{ symbol: '1306.T', name: 'NEXT FUNDS TOPIX ETF' }]),
+        search,
       } as unknown as NonNullable<MarketSearchDeps['etfClient']>,
     })
 
     const out = await aggregateSymbolSearch(deps, '1306')
     const matches = out.filter((r) => r.symbol === '1306.T' && r.sourceId === 'yfinance')
 
+    expect(search).toHaveBeenCalledWith({ query: '1306.T', provider: 'yfinance' })
     expect(matches).toHaveLength(1)
     expect(matches[0]).toMatchObject({ assetClass: 'etf', name: 'NEXT FUNDS TOPIX ETF' })
   })
