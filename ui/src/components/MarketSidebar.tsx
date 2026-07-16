@@ -11,15 +11,33 @@ import { Spinner } from './StateViews'
 
 const ASSET_CLASS_COLORS: Record<string, string> = {
   equity: 'bg-accent/15 text-accent',
+  etf: 'bg-blue-500/15 text-blue-400',
   crypto: 'bg-amber-500/15 text-amber-400',
   currency: 'bg-green/15 text-green',
   commodity: 'bg-purple-500/15 text-purple-400',
   unknown: 'bg-bg-tertiary text-text-muted',
 }
 
+const ASSET_CLASS_LABELS: Record<string, string> = {
+  equity: '株式',
+  etf: 'ETF',
+  crypto: '暗号資産',
+  currency: '為替',
+  commodity: '商品',
+  unknown: '不明',
+}
+
 const CAPABILITY_COLOR: Record<string, string> = {
   realtime: 'text-green', iex: 'text-accent', delayed: 'text-text-muted',
   subscription: 'text-amber-700 dark:text-amber-300', free: 'text-text-muted',
+}
+
+const CAPABILITY_LABELS: Record<string, string> = {
+  realtime: 'リアルタイム',
+  iex: 'IEX',
+  delayed: '遅延',
+  subscription: '契約',
+  free: '無料',
 }
 
 /** A crypto venue's "AAPL" is synthetic — the route segment still needs a valid
@@ -69,7 +87,7 @@ export function MarketSidebar() {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder={t('market.searchPlaceholder')}
+          placeholder="日本株・米国株・ETFを検索"
           className="w-full px-2.5 py-1.5 bg-bg text-text border border-border/70 rounded-md text-[13px] outline-none focus:border-accent"
         />
       </div>
@@ -206,7 +224,7 @@ export function MarketSidebar() {
 function AssetClassChip({ cls }: { cls: string }) {
   return (
     <span className={`shrink-0 text-[9px] uppercase tracking-wide px-1 rounded ${ASSET_CLASS_COLORS[cls] ?? ASSET_CLASS_COLORS.unknown}`}>
-      {cls}
+      {ASSET_CLASS_LABELS[cls] ?? cls}
     </span>
   )
 }
@@ -220,7 +238,9 @@ function SourceTrail({ c }: { c: BarSourceCandidate }) {
     <span className="flex items-center gap-1 shrink-0" title={`${c.barId}${c.barCapability ? ` · ${c.barCapability}` : ''}`}>
       <span className="text-[10px] text-text/75 font-medium truncate max-w-[96px]">{c.sourceId}</span>
       {c.barCapability && (
-        <span className={`text-[9px] ${CAPABILITY_COLOR[c.barCapability] ?? 'text-text-muted'}`}>{c.barCapability}</span>
+        <span className={`text-[9px] ${CAPABILITY_COLOR[c.barCapability] ?? 'text-text-muted'}`}>
+          {CAPABILITY_LABELS[c.barCapability] ?? c.barCapability}
+        </span>
       )}
     </span>
   )
