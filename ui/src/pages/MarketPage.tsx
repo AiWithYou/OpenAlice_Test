@@ -19,13 +19,13 @@ export function MarketPage() {
     let alive = true
     referenceApi.valuation()
       .then((res) => { if (alive) setStrip(res) })
-      .catch((err) => { if (alive) setStripError(err instanceof Error ? err.message : 'Failed to load') })
+      .catch((err) => { if (alive) setStripError(err instanceof Error ? err.message : '読み込みに失敗しました') })
     return () => { alive = false }
   }, [])
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <PageHeader title="Market" description="Search assets and view price history." />
+      <PageHeader title="マーケット" description="日本株・米国株・ETFを検索し、価格履歴と市場データを確認します。" />
       <div className="flex-1 flex flex-col gap-6 px-4 md:px-8 py-4 min-h-0 overflow-y-auto">
         <SearchBox />
 
