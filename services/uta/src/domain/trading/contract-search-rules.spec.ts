@@ -38,16 +38,31 @@ describe('normalizeBrokerSearchPattern', () => {
     })
   })
 
-  describe('equity / commodity: identity', () => {
-    it('passes equity ticker through unchanged', () => {
+  describe('equity: normalize Japanese Yahoo symbols', () => {
+    it('strips .T from a numeric JPX code', () => {
+      expect(normalizeBrokerSearchPattern('7203.T', 'equity')).toBe('7203')
+    })
+
+    it('strips .T from an alphanumeric JPX code', () => {
+      expect(normalizeBrokerSearchPattern('130a.t', 'equity')).toBe('130A')
+    })
+
+    it('passes a US ticker through unchanged', () => {
       expect(normalizeBrokerSearchPattern('AAPL', 'equity')).toBe('AAPL')
+    })
+
+    it('does not rewrite a non-JPX dotted ticker', () => {
+      expect(normalizeBrokerSearchPattern('BRK.B', 'equity')).toBe('BRK.B')
+      expect(normalizeBrokerSearchPattern('ABCD.T', 'equity')).toBe('ABCD.T')
     })
 
     it('does not strip from equity even when it looks like a pair', () => {
       // Some real tickers happen to look like FX pairs (rare, but defend).
       expect(normalizeBrokerSearchPattern('EURUSD', 'equity')).toBe('EURUSD')
     })
+  })
 
+  describe('commodity: identity', () => {
     it('passes commodity id unchanged', () => {
       expect(normalizeBrokerSearchPattern('gold', 'commodity')).toBe('gold')
     })
