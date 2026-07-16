@@ -5,16 +5,22 @@
  * provider config. Used both by the AI tool (marketSearchForResearch) and the
  * HTTP route (/api/market/search) — both surfaces must return the same thing.
  *
- * equity    — SymbolIndex (SEC/TMX local cache, regex, zero-latency)
+ * equity    — SymbolIndex (SEC/TMX local cache) + global vendor search + JPX hint
+ * etf       — keyless Yahoo Finance ETF search (US and global, including `.T`)
  * commodity — CommodityCatalog (canonical catalog, ~25 items)
  * crypto    — cryptoClient.search on yfinance (online fuzzy)
  * currency  — currencyClient.search on yfinance (online fuzzy, XXXUSD filter)
  */
 import type { SymbolIndex } from './equity/symbol-index.js'
 import type { CommodityCatalog } from './commodity/commodity-catalog.js'
-import type { CryptoClientLike, CurrencyClientLike, EquityClientLike } from './client/types.js'
+import type {
+  CryptoClientLike,
+  CurrencyClientLike,
+  EquityClientLike,
+  EtfClientLike,
+} from './client/types.js'
 
-export type AssetClass = 'equity' | 'crypto' | 'currency' | 'commodity'
+export type AssetClass = 'equity' | 'etf' | 'crypto' | 'currency' | 'commodity'
 
 export interface MarketSearchDeps {
   symbolIndex: SymbolIndex
@@ -27,13 +33,16 @@ export interface MarketSearchDeps {
    *  with no restart. A plain array is still accepted (tests, static wiring). */
   equityVendors: string[] | (() => string[] | Promise<string[]>)
   equityClient: EquityClientLike
+  /** Optional for compatibility with small test doubles. Production supplies
+   *  the dedicated ETF client so ETF identity is not collapsed into equity. */
+  etfClient?: EtfClientLike
   cryptoClient: CryptoClientLike
   currencyClient: CurrencyClientLike
   commodityCatalog: CommodityCatalog
 }
 
 export interface MarketSearchResult {
-  /** Equity / crypto / currency have a symbol; commodity uses `id` instead (canonical). */
+  /** Equity / ETF / crypto / currency have a symbol; commodity uses `id`. */
   symbol?: string
   id?: string
   name?: string | null
@@ -43,6 +52,35 @@ export interface MarketSearchResult {
    *  (they fall back to the configured per-asset provider). */
   sourceId?: string
   [key: string]: unknown
+}
+
+/** JPX security codes are four characters, start with a digit, and may now
+ * contain letters (for example 130A). Yahoo appends `.T` to both stocks and
+ * ETFs. Requiring the leading digit avoids rewriting ordinary US tickers. */
+const JPX_SECURITY_CODE_RE = /^\d[0-9A-Z]{3}$/i
+const YAHOO_JPX_SYMBOL_RE = /^(\d[0-9A-Z]{3})\.T$/i
+
+export function normalizeJapaneseMarketTicker(query: string): string | null {
+  const q = query.trim().toUpperCase()
+  if (YAHOO_JPX_SYMBOL_RE.test(q)) return q
+  if (JPX_SECURITY_CODE_RE.test(q)) return `${q}.T`
+  return null
+}
+
+function makeJapaneseSecurityHint(symbol: string, sourceId: string): MarketSearchResult {
+  const code = symbol.replace(/\.T$/i, '')
+  return {
+    symbol,
+    name: `JPX/TSE ${code}`,
+    assetClass: 'equity',
+    sourceId,
+    exchange: 'JPX/TSE',
+    country: 'Japan',
+  }
+}
+
+function sourceSymbolKey(r: MarketSearchResult): string {
+  return `${r.sourceId ?? ''}|${String(r.symbol ?? '').toUpperCase()}`
 }
 
 /**
@@ -89,23 +127,33 @@ export async function aggregateSymbolSearch(
 
   // Local SEC index — US-only, zero-latency, authoritative for US tickers.
   // Attributed to the primary equity vendor (its symbols feed that provider).
-  const equityResults = deps.symbolIndex
+  const localEquityResults: MarketSearchResult[] = deps.symbolIndex
     .search(q, limit)
     .map((r) => ({ ...r, assetClass: 'equity' as const, sourceId: primaryEquity }))
+
+  // A bare JPX code is usable immediately even when Yahoo's fuzzy endpoint does
+  // not understand the localized company/fund name. ETF search below can replace
+  // this generic equity hint with an authoritative ETF-classified result.
+  const japaneseTicker = normalizeJapaneseMarketTicker(q)
+  const japanSecurityResults = japaneseTicker
+    ? [makeJapaneseSecurityHint(japaneseTicker, primaryEquity)]
+    : []
 
   const commodityResults = deps.commodityCatalog
     .search(q, limit)
     .map((r) => ({ ...r, assetClass: 'commodity' as const }))
 
-  // Online searches, concurrent: crypto + currency on yfinance; equity fanned
-  // out over EVERY enabled vendor (default yfinance + user-opted extras like
-  // eastmoney). Each equity vendor lives in its own symbol namespace — yfinance
-  // returns Yahoo tickers (600519.SS), eastmoney returns secids (1.600519) for
-  // CN names yfinance can't match — so all are kept as redundant candidates.
+  // Online searches, concurrent: crypto/currency/ETF on yfinance; equities fan
+  // out over EVERY enabled vendor. ETF search deliberately stays on yfinance:
+  // it is keyless, global, and filters Yahoo results by quoteType=ETF.
+  const etfQuery = japaneseTicker ?? q
   const [coreSettled, equitySettled] = await Promise.all([
     Promise.allSettled([
       deps.cryptoClient.search({ query: q, provider: 'yfinance' }),
       deps.currencyClient.search({ query: q, provider: 'yfinance' }),
+      deps.etfClient
+        ? deps.etfClient.search({ query: etfQuery, provider: 'yfinance' })
+        : Promise.resolve([]),
     ]),
     Promise.allSettled(
       equityVendors.map((v) =>
@@ -115,7 +163,7 @@ export async function aggregateSymbolSearch(
       ),
     ),
   ])
-  const [cryptoSettled, currencySettled] = coreSettled
+  const [cryptoSettled, currencySettled, etfSettled] = coreSettled
 
   const cryptoResults = (cryptoSettled.status === 'fulfilled' ? cryptoSettled.value : []).map(
     (r) => ({ ...r, assetClass: 'crypto' as const }),
@@ -128,13 +176,21 @@ export async function aggregateSymbolSearch(
     })
     .map((r) => ({ ...r, assetClass: 'currency' as const }))
 
+  const etfResults: MarketSearchResult[] = (etfSettled.status === 'fulfilled' ? etfSettled.value : [])
+    .map((r) => ({ ...r, assetClass: 'etf' as const, sourceId: 'yfinance' }))
+    .filter((r) => Boolean(r.symbol))
+
+  // If Yahoo authoritatively identifies a symbol as an ETF, suppress an
+  // otherwise identical equity hint/result from the same vendor. Different
+  // vendor namespaces remain intentionally redundant.
+  const etfKeys = new Set(etfResults.map(sourceSymbolKey))
+  const equitySeedResults = [...localEquityResults, ...japanSecurityResults]
+    .filter((r) => !etfKeys.has(sourceSymbolKey(r)))
+
   // Merge equity online hits, de-duped WITHIN each vendor's namespace by
-  // `vendor|symbol` (the SEC index already seeded the primary vendor's keys, so
-  // a US name doesn't double up). Cross-vendor redundancy is intentional —
-  // 600519.SS (yfinance) and 1.600519 (eastmoney) are different sources.
-  const seenEquity = new Set(
-    equityResults.map((r) => `${r.sourceId}|${String((r as Record<string, unknown>).symbol ?? '').toUpperCase()}`),
-  )
+  // `vendor|symbol`. Cross-vendor redundancy is intentional — 600519.SS
+  // (yfinance) and 1.600519 (eastmoney) are different sources.
+  const seenEquity = new Set(equitySeedResults.map(sourceSymbolKey))
   const equityOnlineResults: MarketSearchResult[] = []
   for (const settled of equitySettled) {
     if (settled.status !== 'fulfilled') continue
@@ -142,14 +198,15 @@ export async function aggregateSymbolSearch(
     for (const r of rows) {
       const sym = String((r as Record<string, unknown>).symbol ?? '')
       const key = `${vendor}|${sym.toUpperCase()}`
-      if (!sym || seenEquity.has(key)) continue
+      if (!sym || seenEquity.has(key) || etfKeys.has(key)) continue
       seenEquity.add(key)
       equityOnlineResults.push({ ...r, symbol: sym, assetClass: 'equity', sourceId: vendor })
     }
   }
 
   const all: MarketSearchResult[] = [
-    ...equityResults,
+    ...etfResults,
+    ...equitySeedResults,
     ...equityOnlineResults,
     ...cryptoResults,
     ...currencyResults,
