@@ -5,10 +5,20 @@ import { useAssetSearch } from './useAssetSearch'
 
 const ASSET_CLASS_COLORS: Record<string, string> = {
   equity: 'bg-accent/15 text-accent',
+  etf: 'bg-blue-500/15 text-blue-400',
   crypto: 'bg-amber-500/15 text-amber-400',
   currency: 'bg-green/15 text-green',
   commodity: 'bg-purple-500/15 text-purple-400',
   unknown: 'bg-bg-tertiary text-text-muted',
+}
+
+const ASSET_CLASS_LABELS: Record<string, string> = {
+  equity: '株式',
+  etf: 'ETF',
+  crypto: '暗号資産',
+  currency: '為替',
+  commodity: '商品',
+  unknown: '不明',
 }
 
 const CAPABILITY_COLOR: Record<string, string> = {
@@ -17,6 +27,14 @@ const CAPABILITY_COLOR: Record<string, string> = {
   delayed: 'text-text-muted',
   subscription: 'text-amber-400',
   free: 'text-text-muted',
+}
+
+const CAPABILITY_LABELS: Record<string, string> = {
+  realtime: 'リアルタイム',
+  iex: 'IEX',
+  delayed: '遅延',
+  subscription: '契約データ',
+  free: '無料',
 }
 
 export function SearchBox() {
@@ -76,7 +94,7 @@ export function SearchBox() {
     <div ref={containerRef} className="relative">
       <input
         className="w-full px-3 py-2 text-[14px] bg-bg-secondary border border-border rounded-md focus:outline-none focus:border-accent placeholder:text-text-muted/50"
-        placeholder="Search assets — AAPL, bitcoin, EUR, gold…"
+        placeholder="日本株・米国株・ETFを検索（7203、AAPL、SPY、1306）"
         value={query}
         onChange={(e) => { setQuery(e.target.value); setOpen(true) }}
         onFocus={() => setOpen(true)}
@@ -85,10 +103,10 @@ export function SearchBox() {
       {open && query.trim() && (
         <div className="absolute z-20 mt-1 w-full bg-bg-secondary border border-border rounded-md shadow-lg max-h-[360px] overflow-y-auto">
           {loading && results.length === 0 && (
-            <div className="px-3 py-2 text-[13px] text-text-muted">Searching…</div>
+            <div className="px-3 py-2 text-[13px] text-text-muted">検索中…</div>
           )}
           {!loading && results.length === 0 && (
-            <div className="px-3 py-2 text-[13px] text-text-muted">No matches</div>
+            <div className="px-3 py-2 text-[13px] text-text-muted">該当する銘柄はありません</div>
           )}
           {results.map((r, i) => (
             <button
@@ -107,11 +125,13 @@ export function SearchBox() {
               <span className="ml-auto flex items-center gap-1 shrink-0 text-[11px] text-text-muted">
                 <span className="font-medium text-text/80">{r.sourceId}</span>
                 {r.barCapability && (
-                  <span className={CAPABILITY_COLOR[r.barCapability] ?? 'text-text-muted'}>· {r.barCapability}</span>
+                  <span className={CAPABILITY_COLOR[r.barCapability] ?? 'text-text-muted'}>
+                    · {CAPABILITY_LABELS[r.barCapability] ?? r.barCapability}
+                  </span>
                 )}
               </span>
               <span className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded font-medium shrink-0 ${ASSET_CLASS_COLORS[r.assetClass] ?? ASSET_CLASS_COLORS.unknown}`}>
-                {r.assetClass}
+                {ASSET_CLASS_LABELS[r.assetClass] ?? r.assetClass}
               </span>
             </button>
           ))}
