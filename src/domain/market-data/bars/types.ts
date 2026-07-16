@@ -18,7 +18,7 @@
  */
 
 import type { Bar, BarParams, ContractSearchHit } from '@traderalice/uta-protocol'
-import type { AssetClass, MarketSearchDeps } from '../aggregate-search.js'
+import type { AssetClass, MarketAssetClass, MarketSearchDeps } from '../aggregate-search.js'
 import type {
   EquityClientLike,
   CryptoClientLike,
@@ -91,7 +91,7 @@ export interface BarSourceCandidate {
   symbol: string
   /** Human-readable asset name (vendor results) — for the search list. */
   name?: string
-  assetClass: AssetClass | 'unknown'
+  assetClass: MarketAssetClass | 'unknown'
   label: string
   barCapability?: BarCapability
 }
