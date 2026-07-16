@@ -22,6 +22,13 @@ import type {
 
 export type AssetClass = 'equity' | 'etf' | 'crypto' | 'currency' | 'commodity'
 
+type ModelExecutingEquityClient = EquityClientLike & {
+  executeModel?<T = Record<string, unknown>>(
+    model: string,
+    params?: Record<string, unknown>,
+  ): Promise<T[]>
+}
+
 export interface MarketSearchDeps {
   symbolIndex: SymbolIndex
   /** Equity vendors to fan search across — [primary, ...extraVendors]. The
@@ -33,8 +40,8 @@ export interface MarketSearchDeps {
    *  with no restart. A plain array is still accepted (tests, static wiring). */
   equityVendors: string[] | (() => string[] | Promise<string[]>)
   equityClient: EquityClientLike
-  /** Optional for compatibility with small test doubles. Production supplies
-   *  the dedicated ETF client so ETF identity is not collapsed into equity. */
+  /** Optional for compatibility with small test doubles. Production can use
+   *  either this dedicated client or the embedded SDK capability on equityClient. */
   etfClient?: EtfClientLike
   cryptoClient: CryptoClientLike
   currencyClient: CurrencyClientLike
@@ -147,13 +154,18 @@ export async function aggregateSymbolSearch(
   // out over EVERY enabled vendor. ETF search deliberately stays on yfinance:
   // it is keyless, global, and filters Yahoo results by quoteType=ETF.
   const etfQuery = japaneseTicker ?? q
+  const modelClient = deps.equityClient as ModelExecutingEquityClient
+  const etfSearch = deps.etfClient
+    ? deps.etfClient.search({ query: etfQuery, provider: 'yfinance' })
+    : modelClient.executeModel
+      ? modelClient.executeModel('EtfSearch', { query: etfQuery, provider: 'yfinance' })
+      : Promise.resolve([])
+
   const [coreSettled, equitySettled] = await Promise.all([
     Promise.allSettled([
       deps.cryptoClient.search({ query: q, provider: 'yfinance' }),
       deps.currencyClient.search({ query: q, provider: 'yfinance' }),
-      deps.etfClient
-        ? deps.etfClient.search({ query: etfQuery, provider: 'yfinance' })
-        : Promise.resolve([]),
+      etfSearch,
     ]),
     Promise.allSettled(
       equityVendors.map((v) =>
