@@ -13,7 +13,11 @@
  */
 
 import type { BarParams, BarInterval, Bar } from '@traderalice/uta-protocol'
-import { aggregateSymbolSearch, type AssetClass } from '../aggregate-search.js'
+import {
+  aggregateSymbolSearch,
+  type AssetClass,
+  type MarketAssetClass,
+} from '../aggregate-search.js'
 import type {
   BarService,
   BarServiceDeps,
@@ -48,9 +52,10 @@ function toBarInterval(interval: string): BarInterval {
 
 /** Map a broker secType to the data-vendor asset class (for candidate display
  *  + later vendor-fallback routing). 'unknown' when it doesn't map cleanly. */
-function secTypeToAssetClass(secType: string | undefined): AssetClass | 'unknown' {
+function secTypeToAssetClass(secType: string | undefined): MarketAssetClass | 'unknown' {
   switch ((secType ?? '').toUpperCase()) {
-    case 'STK': case 'ETF': case 'WAR': return 'equity'
+    case 'ETF': return 'etf'
+    case 'STK': case 'WAR': return 'equity'
     case 'CRYPTO': case 'CRYPTO_PERP': return 'crypto'
     case 'CASH': return 'currency'
     case 'FUT': case 'FOP': case 'CMDTY': return 'commodity'
@@ -281,9 +286,13 @@ export function createBarService(deps: BarServiceDeps): BarService {
       if (vendorRes.status === 'fulfilled') {
         for (const r of vendorRes.value) {
           const symbol = String(r.symbol ?? r.id ?? '')
-          // Per-result vendor attribution (multi-vendor equity); falls back to
-          // the configured per-asset provider for crypto/currency/commodity.
-          const provider = r.sourceId ?? deps.vendorProviders[r.assetClass]
+          // Per-result vendor attribution (multi-vendor equity); ETF falls back
+          // to the configured equity provider when no sourceId is attached.
+          const provider = r.sourceId ?? (
+            r.assetClass === 'etf'
+              ? deps.vendorProviders.equity
+              : deps.vendorProviders[r.assetClass]
+          )
           const cap = VENDOR_CAPABILITY[provider]
           const base = r.name ? `${symbol} · ${r.name} (${provider})` : `${symbol} (${provider})`
           out.push({
