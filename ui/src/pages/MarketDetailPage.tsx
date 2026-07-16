@@ -9,6 +9,14 @@ interface MarketDetailPageProps {
   spec: Extract<ViewSpec, { kind: 'market-detail' }>
 }
 
+const ASSET_CLASS_LABELS: Record<MarketDetailPageProps['spec']['params']['assetClass'], string> = {
+  equity: '株式',
+  etf: 'ETF',
+  crypto: '暗号資産',
+  currency: '為替',
+  commodity: '商品',
+}
+
 export function MarketDetailPage({ spec }: MarketDetailPageProps) {
   const { assetClass, symbol } = spec.params
 
@@ -16,7 +24,7 @@ export function MarketDetailPage({ spec }: MarketDetailPageProps) {
     <div className="flex flex-col flex-1 min-h-0">
       <PageHeader
         title={symbol}
-        description={`${assetClass} · price history`}
+        description={`${ASSET_CLASS_LABELS[assetClass]} · 価格履歴`}
         right={<PinButton assetClass={assetClass} symbol={symbol} />}
       />
       <div className="flex-1 flex flex-col gap-3 px-4 md:px-8 py-4 min-h-0 overflow-y-auto">
@@ -45,7 +53,7 @@ function PinButton({ assetClass, symbol }: PinButtonProps) {
     <button
       type="button"
       onClick={() => (pinned ? remove(assetClass, symbol) : add(assetClass, symbol))}
-      title={pinned ? 'Remove from watchlist' : 'Add to watchlist'}
+      title={pinned ? 'ウォッチリストから削除' : 'ウォッチリストに追加'}
       className={`flex items-center gap-1.5 px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
         pinned
           ? 'border-amber-500/40 text-amber-400 bg-amber-500/10 hover:bg-amber-500/15'
@@ -55,7 +63,7 @@ function PinButton({ assetClass, symbol }: PinButtonProps) {
       <svg width="13" height="13" viewBox="0 0 24 24" fill={pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
       </svg>
-      {pinned ? 'Pinned' : 'Pin'}
+      {pinned ? '登録済み' : '登録'}
     </button>
   )
 }
