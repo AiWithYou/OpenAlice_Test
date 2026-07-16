@@ -1,9 +1,10 @@
 import { fetchJson } from './client'
 
-export type AssetClass = 'equity' | 'crypto' | 'currency' | 'commodity'
+export type AssetClass = 'equity' | 'etf' | 'crypto' | 'currency' | 'commodity'
+export type BarAssetClass = Exclude<AssetClass, 'etf'>
 
 export interface SearchResult {
-  /** Equity / crypto / currency have `symbol`. Commodity uses `id` (canonical). */
+  /** Equity / ETF / crypto / currency have `symbol`. Commodity uses `id`. */
   symbol?: string
   id?: string
   name?: string | null
@@ -107,9 +108,8 @@ export const marketApi = {
   },
 
   /**
-   * Historical OHLCV candles. Provider comes from the server-side default
-   * (config.marketData.providers[assetClass]) — UI doesn't pick provider.
-   * `assetClass` only decides the URL prefix; `interval` defaults to `1d`.
+   * Historical OHLCV candles. ETF price history intentionally reuses the equity
+   * endpoint because Yahoo Finance serves both from the same chart namespace.
    */
   async historical(
     assetClass: AssetClass,
@@ -119,11 +119,12 @@ export const marketApi = {
     if (assetClass === 'commodity') {
       throw new Error('commodity historical not supported yet')
     }
+    const priceAssetClass: BarAssetClass = assetClass === 'etf' ? 'equity' : assetClass
     const qs = new URLSearchParams({ symbol })
     qs.set('interval', opts.interval ?? '1d')
     if (opts.startDate) qs.set('start_date', opts.startDate)
     if (opts.endDate) qs.set('end_date', opts.endDate)
-    return fetchJson(`/api/market-data-v1/${assetClass}/price/historical?${qs}`)
+    return fetchJson(`/api/market-data-v1/${priceAssetClass}/price/historical?${qs}`)
   },
 
   /** Equity-specific endpoints — Alice infers provider from config, no ?provider=. */
@@ -186,7 +187,7 @@ export const barsApi = {
   async bars(params: {
     barId?: string
     symbol?: string
-    assetClass?: AssetClass
+    assetClass?: BarAssetClass
     interval: string
     count?: number
     start?: string
