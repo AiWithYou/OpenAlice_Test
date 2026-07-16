@@ -10,7 +10,14 @@ import {
   type CandlestickData,
   type HistogramData,
 } from 'lightweight-charts'
-import { barsApi, type AssetClass, type HistoricalBar, type BarSourceCandidate, type BarMeta } from '../../api/market'
+import {
+  barsApi,
+  type AssetClass,
+  type BarAssetClass,
+  type HistoricalBar,
+  type BarSourceCandidate,
+  type BarMeta,
+} from '../../api/market'
 import { Skeleton } from '../StateViews'
 
 type Interval = '1m' | '5m' | '1h' | '1d'
@@ -20,6 +27,28 @@ const INTERVALS: Interval[] = ['1m', '5m', '1h', '1d']
 const TIMEFRAMES: Timeframe[] = ['1D', '5D', '1M', '3M', '1Y', '5Y', 'All']
 const DEFAULT_INTERVAL: Interval = '1d'
 const DEFAULT_RANGE: Timeframe = '1Y'
+
+const ASSET_CLASS_LABELS: Record<AssetClass, string> = {
+  equity: '株式',
+  etf: 'ETF',
+  crypto: '暗号資産',
+  currency: '為替',
+  commodity: '商品',
+}
+
+const TIMEFRAME_LABELS: Record<Timeframe, string> = {
+  '1D': '1日',
+  '5D': '5日',
+  '1M': '1か月',
+  '3M': '3か月',
+  '1Y': '1年',
+  '5Y': '5年',
+  All: '全期間',
+}
+
+function toBarAssetClass(assetClass: AssetClass): BarAssetClass {
+  return assetClass === 'etf' ? 'equity' : assetClass
+}
 
 function parseInterval(s: string | null): Interval {
   return (INTERVALS as string[]).includes(s ?? '') ? (s as Interval) : DEFAULT_INTERVAL
@@ -170,7 +199,7 @@ export function KlinePanel({ selection }: Props) {
     if (selection.assetClass === 'commodity') {
       setBars(null)
       setMeta(null)
-      setError('Commodity K-line support is coming in the next step.')
+      setError('商品先物・商品指数のローソク足表示は未対応です。')
       return
     }
     let cancelled = false
@@ -179,17 +208,25 @@ export function KlinePanel({ selection }: Props) {
       setError(null)
       const days = daysForTimeframe(tf)
       const params: Parameters<typeof barsApi.bars>[0] = { interval }
-      if (selectedBarId) params.barId = selectedBarId
-      else { params.symbol = selection.symbol; params.assetClass = selection.assetClass }
+      const barAssetClass = toBarAssetClass(selection.assetClass)
+      if (selectedBarId) {
+        params.barId = selectedBarId
+        // A vendor barId still needs its asset class for backend routing.
+        // ETF OHLCV uses the equity historical model.
+        params.assetClass = barAssetClass
+      } else {
+        params.symbol = selection.symbol
+        params.assetClass = barAssetClass
+      }
       if (days != null) params.start = startDateFromToday(days)
 
       barsApi.bars(params)
         .then((res) => {
           if (cancelled) return
           if (res.error || !res.results) {
-            setError(res.error ?? 'No data returned.'); setBars(null); setMeta(null)
+            setError(res.error ?? '価格データを取得できませんでした。'); setBars(null); setMeta(null)
           } else if (res.results.length === 0) {
-            setError('No bars in this range.'); setBars([]); setMeta(res.meta)
+            setError('指定期間の価格データがありません。'); setBars([]); setMeta(res.meta)
           } else {
             setBars(res.results); setMeta(res.meta)
           }
@@ -236,8 +273,8 @@ export function KlinePanel({ selection }: Props) {
   }, [bars])
 
   const title = useMemo(() => {
-    if (!selection) return 'Select a symbol'
-    return `${selection.symbol} · ${selection.assetClass}`
+    if (!selection) return '銘柄を選択してください'
+    return `${selection.symbol} · ${ASSET_CLASS_LABELS[selection.assetClass]}`
   }, [selection])
 
   // Source options for the picker — always include the currently-shown provider
@@ -258,26 +295,26 @@ export function KlinePanel({ selection }: Props) {
           {meta && (
             <span
               className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-bg-tertiary text-text-muted font-medium"
-              title={`Provider: ${meta.barId}${meta.barCapability ? ` (${meta.barCapability})` : ''}`}
+              title={`データ提供元: ${meta.barId}${meta.barCapability ? ` (${meta.barCapability})` : ''}`}
             >
               {meta.sourceId}{meta.barCapability ? ` · ${meta.barCapability}` : ''}
             </span>
           )}
           {bars && bars.length > 0 && (
             <span className="text-[11px] text-text-muted/60 truncate">
-              {bars.length} bars · {bars[0].date} → {bars[bars.length - 1].date}
+              {bars.length}本 · {bars[0].date} → {bars[bars.length - 1].date}
             </span>
           )}
         </div>
         <div className="flex items-center gap-5 flex-wrap">
           {sourceOptions.length > 1 && (
             <label className="flex items-center gap-2">
-              <span className="text-[11px] uppercase tracking-wide text-text-muted/70">Source</span>
+              <span className="text-[11px] uppercase tracking-wide text-text-muted/70">データ元</span>
               <select
                 value={selectedBarId ?? meta?.barId ?? ''}
                 onChange={(e) => setSelectedBarId(e.target.value || null)}
                 className="bg-bg-tertiary border border-border rounded px-2 py-1 text-[12px] text-text cursor-pointer max-w-[240px]"
-                title="Which provider's K-line to show — sources are never merged; you pick"
+                title="表示する価格データの提供元を選択します。複数ソースは統合されません。"
               >
                 {sourceOptions.map((c) => (
                   <option key={c.barId} value={c.barId}>
@@ -288,8 +325,8 @@ export function KlinePanel({ selection }: Props) {
             </label>
           )}
           <label className="flex items-center gap-2">
-            <span className="text-[11px] uppercase tracking-wide text-text-muted/70">Interval</span>
-            <div className="flex border border-border rounded overflow-hidden" title="Candle width (how much time each bar covers)">
+            <span className="text-[11px] uppercase tracking-wide text-text-muted/70">足種</span>
+            <div className="flex border border-border rounded overflow-hidden" title="1本のローソク足が表す時間">
               {INTERVALS.map((iv, i) => (
                 <button
                   key={iv}
@@ -304,8 +341,8 @@ export function KlinePanel({ selection }: Props) {
             </div>
           </label>
           <label className="flex items-center gap-2">
-            <span className="text-[11px] uppercase tracking-wide text-text-muted/70">Range</span>
-            <div className="flex border border-border rounded overflow-hidden" title="How far back to load history">
+            <span className="text-[11px] uppercase tracking-wide text-text-muted/70">期間</span>
+            <div className="flex border border-border rounded overflow-hidden" title="読み込む価格履歴の期間">
               {TIMEFRAMES.map((t, i) => (
                 <button
                   key={t}
@@ -314,7 +351,7 @@ export function KlinePanel({ selection }: Props) {
                     i > 0 ? 'border-l border-border' : ''
                   } ${tf === t ? 'bg-bg-tertiary text-text' : 'text-text-muted hover:text-text'}`}
                 >
-                  {t}
+                  {TIMEFRAME_LABELS[t]}
                 </button>
               ))}
             </div>
@@ -326,7 +363,7 @@ export function KlinePanel({ selection }: Props) {
         <div ref={containerRef} className="absolute inset-0" />
         {!selection && (
           <div className="absolute inset-0 flex items-center justify-center text-[13px] text-text-muted">
-            Pick an asset to see the K-line.
+            銘柄を選択するとローソク足を表示します。
           </div>
         )}
         {selection && loading && !bars && (
@@ -335,7 +372,7 @@ export function KlinePanel({ selection }: Props) {
           </div>
         )}
         {selection && loading && (
-          <div className="absolute top-2 right-2 text-[11px] text-text-muted">Loading…</div>
+          <div className="absolute top-2 right-2 text-[11px] text-text-muted">読み込み中…</div>
         )}
         {selection && error && !loading && (
           <div className="absolute inset-0 flex items-center justify-center text-[13px] text-text-muted px-8 text-center">
