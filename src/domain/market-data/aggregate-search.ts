@@ -20,7 +20,10 @@ import type {
   EtfClientLike,
 } from './client/types.js'
 
-export type AssetClass = 'equity' | 'etf' | 'crypto' | 'currency' | 'commodity'
+/** Asset classes supported by the historical-bar and provider-config layers. */
+export type AssetClass = 'equity' | 'crypto' | 'currency' | 'commodity'
+/** Search/UI identity adds ETF without disturbing the existing provider schema. */
+export type MarketAssetClass = AssetClass | 'etf'
 
 type ModelExecutingEquityClient = EquityClientLike & {
   executeModel?<T = Record<string, unknown>>(
@@ -53,7 +56,7 @@ export interface MarketSearchResult {
   symbol?: string
   id?: string
   name?: string | null
-  assetClass: AssetClass
+  assetClass: MarketAssetClass
   /** Which vendor produced this hit — drives the barId's sourceId so getBars
    *  routes back to the same vendor. Absent for crypto/currency/commodity
    *  (they fall back to the configured per-asset provider). */
