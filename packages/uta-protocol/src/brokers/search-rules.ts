@@ -23,10 +23,19 @@ const QUOTE_SUFFIX_RE = new RegExp(
 )
 
 /**
+ * Yahoo Finance represents Tokyo-listed securities as `<JPX code>.T`, while
+ * brokers such as IBKR search the native JPX code. The code may be numeric
+ * (`7203`) or the newer alphanumeric form (`130A`). Requiring a leading digit
+ * avoids rewriting ordinary US tickers that happen to end in `.T`.
+ */
+const YAHOO_JPX_SYMBOL_RE = /^(\d[0-9A-Z]{3})\.T$/i
+
+/**
  * Translate a data-vendor symbol into the pattern the broker layer
  * actually understands.
  *
- * - equity / commodity / unknown → identity (vendor and broker agree)
+ * - equity → strip Yahoo's `.T` suffix from a four-character JPX code
+ * - commodity / unknown → identity
  * - crypto / currency → strip a known quote-currency suffix when the
  *   remaining base is at least two characters; otherwise identity.
  *
@@ -46,7 +55,10 @@ export function normalizeBrokerSearchPattern(
       const m = trimmed.match(QUOTE_SUFFIX_RE)
       return m ? m[1].toUpperCase() : trimmed
     }
-    case 'equity':
+    case 'equity': {
+      const jpx = trimmed.match(YAHOO_JPX_SYMBOL_RE)
+      return jpx ? jpx[1].toUpperCase() : trimmed
+    }
     case 'commodity':
     case 'unknown':
     default:
