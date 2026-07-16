@@ -5,12 +5,13 @@ import type { AppLocale } from '../lib/intl'
 /**
  * Locale preference store — the single source of truth for the UI language.
  *
- * Default is 'en'; we do NOT auto-detect navigator.language. During the i18n
- * rollout that's deliberate: a half-translated surface should never ambush a
- * zh/ja user who never asked to switch — they opt in via the Settings picker.
+ * This Japan-focused distribution defaults to Japanese. Users can still switch
+ * languages from Settings; the explicit choice is persisted on this device.
  *
  * Persistence mirrors the workspace store's loud-fail contract (see
  * tabs/store.ts): a `version` bump clears stored state, NO migrate function.
+ * Version 2 intentionally resets the previous English-by-default state so an
+ * existing installation receives the new Japanese default after upgrading.
  *
  * This store stays pure (no i18next / intl imports) so the wiring is strictly
  * one-directional: i18n/index.ts subscribes here and applies the side effects.
@@ -24,12 +25,12 @@ interface LocaleStore {
 export const useLocaleStore = create<LocaleStore>()(
   persist(
     (set) => ({
-      locale: 'en',
+      locale: 'ja',
       setLocale: (locale) => set({ locale }),
     }),
     {
       name: 'openalice.locale.v1',
-      version: 1,
+      version: 2,
     },
   ),
 )
