@@ -135,7 +135,7 @@ function AdoptStatic({ spec }: { spec: ViewSpec }) {
 function AdoptMarketDetail() {
   const { assetClass, symbol } = useParams<{ assetClass: string; symbol: string }>()
   const [search] = useSearchParams()
-  const valid: ReadonlyArray<string> = ['equity', 'crypto', 'currency', 'commodity']
+  const valid: ReadonlyArray<string> = ['equity', 'etf', 'crypto', 'currency', 'commodity']
   if (!assetClass || !symbol || !valid.includes(assetClass)) {
     return <Navigate to="/market" replace />
   }
