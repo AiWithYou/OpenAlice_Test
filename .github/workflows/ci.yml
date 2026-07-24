@@ -5,11 +5,6 @@ on:
     branches: [master, dev]
   pull_request:
     branches: [dev, master]
-  # Keep a full cross-platform safety net for lightweight PRs that intentionally
-  # skip the expensive host matrix. Scheduled workflows run from the default
-  # branch, while checkout below points the jobs at the current dev branch.
-  schedule:
-    - cron: "0 19 * * *"
   workflow_dispatch:
 
 permissions:
@@ -18,7 +13,7 @@ permissions:
 
 # Agent-driven iterations often supersede an earlier commit before its Windows
 # job finishes. Keep only the latest PR/dev run while never cancelling a master
-# or scheduled validation.
+# validation.
 concurrency:
   group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/dev' }}
@@ -80,8 +75,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'schedule' && 'dev' || '' }}
 
       - uses: pnpm/action-setup@v4
 
@@ -111,8 +104,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'schedule' && 'dev' || '' }}
 
       - uses: pnpm/action-setup@v4
 
@@ -146,8 +137,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'schedule' && 'dev' || '' }}
 
       - uses: pnpm/action-setup@v4
 
